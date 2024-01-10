@@ -2,7 +2,8 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Function, Runtime, AssetCode } from 'aws-cdk-lib/aws-lambda';
 import { aws_s3 as s3 } from 'aws-cdk-lib';
-import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import { LambdaIntegration } from 'aws-cdk-lib/aws-apigateway';
+import { RestApi } from 'aws-cdk-lib/aws-apigateway';
 
 export class StandaloneLambdaStackStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -15,14 +16,32 @@ export class StandaloneLambdaStackStack extends cdk.Stack {
       code: AssetCode.fromAsset('src')
     });
 
-    
-    const booksIntegration = new HttpLambdaIntegration('BooksIntegration', myFunction);
-
-    const httpApi = new cdk.aws_apigatewayv2.HttpApi(this, 'HttpApi');
-    httpApi.addRoutes({
-      path: '/books/{requestId}',
-      methods: [ cdk.aws_apigatewayv2.HttpMethod.GET ],
-      integration: booksIntegration,
+    const restApi = new RestApi(this, 'Books', {
+      description: 'Book API',
+      deployOptions: {
+        stageName: 'dev'
+      },
+      defaultCorsPreflightOptions: {
+        allowHeaders: [
+          'Content-Type',
+          'X-Amz-Date',
+          'Authorization',
+          'X-Api-Key'
+        ],
+        allowMethods: ['OPTIONS', 'GET', 'POST'],
+        allowCredentials: false,
+        allowOrigins: ['http://localhost:4200']
+      }
     });
+
+    const books = restApi.root.addResource('books');
+    const bookResource = books.addResource('{resourceId}')
+    bookResource.addMethod(
+      'GET',
+      new LambdaIntegration(myFunction, { proxy: true })
+    );
+
+    new cdk.CfnOutput(this, 'apiUrl', {value: restApi.url});
+
   }
 }
